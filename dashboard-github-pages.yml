@@ -1,0 +1,59 @@
+name: Dashboard mantenimiento
+
+on:
+  workflow_dispatch:
+    inputs:
+      anio:
+        description: "Anio a consultar. Dejar vacio para mes actual Colombia."
+        required: false
+        type: string
+      mes:
+        description: "Mes numerico. Dejar vacio para mes actual Colombia."
+        required: false
+        type: string
+  schedule:
+    - cron: "0 19 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dashboard-mantenimiento
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r github_actions/requirements.txt
+
+      - name: Generate dashboard
+        env:
+          TENANT_ID: ${{ secrets.TENANT_ID }}
+          CLIENT_ID: ${{ secrets.CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.CLIENT_SECRET }}
+          SUPPORTS_FOLDER_URL: ${{ secrets.SUPPORTS_FOLDER_URL }}
+          CRONOGRAMA_URL: ${{ secrets.CRONOGRAMA_URL }}
+          DASHBOARD_ROUTE_NAME: ${{ vars.DASHBOARD_ROUTE_NAME || 'GITHUB' }}
+          DASHBOARD_YEAR: ${{ inputs.anio }}
+          DASHBOARD_MONTH: ${{ inputs.mes }}
+        run: python github_actions/generate_dashboard.py
+
+      - name: Upload dashboard artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dashboard-mantenimiento
+          path: public
+          retention-days: 30
