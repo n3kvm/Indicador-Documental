@@ -11,6 +11,9 @@ OUTPUT = Path(os.environ.get("DASHBOARD_OUTPUT_PATH", r"C:\Users\DELL\Documents\
 ANIO = os.environ.get("SHAREPOINT_ANIO", "2026")
 CARPETA_MES = os.environ.get("SHAREPOINT_CARPETA_MES", "05-MAYO")
 REFRESH_ENDPOINT = os.environ.get("DASHBOARD_REFRESH_ENDPOINT", "")
+GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY", "")
+GITHUB_WORKFLOW_FILE = os.environ.get("DASHBOARD_GITHUB_WORKFLOW_FILE", "dashboard-github-pages.yml")
+GITHUB_BRANCH = os.environ.get("DASHBOARD_GITHUB_BRANCH", os.environ.get("GITHUB_REF_NAME", "main"))
 
 
 def rows_from_sheet(wb, sheet_name):
@@ -224,6 +227,13 @@ a{{color:var(--blue);text-decoration:none}} a:hover{{text-decoration:underline}}
 const DATA = {payload};
 const REFRESH_ENDPOINT = "{REFRESH_ENDPOINT}";
 const REFRESH_CONFIG = {{anio:"{ANIO}", mes:"{CARPETA_MES.split('-', 1)[0]}"}};
+const GITHUB_REFRESH = {{
+  repository: "{GITHUB_REPOSITORY}",
+  workflow: "{GITHUB_WORKFLOW_FILE}",
+  branch: "{GITHUB_BRANCH}",
+  anio: "{ANIO}",
+  mes: "{CARPETA_MES.split('-', 1)[0]}"
+}};
 const state = {{tab:"sites", search:"", status:"all", ues:"all", onlyAlerts:"all", selectedDays:new Set()}};
 const $ = id => document.getElementById(id);
 const fmt = new Intl.NumberFormat("es-CO", {{maximumFractionDigits:1}});
@@ -384,6 +394,10 @@ async function refreshSharePoint() {{
   btn.disabled = true;
   status.classList.remove("bad-text");
   if (!endpoint) {{
+    if (GITHUB_REFRESH.repository) {{
+      await triggerGitHubWorkflow(btn, status);
+      return;
+    }}
     status.classList.add("bad-text");
     status.textContent = "Este dashboard esta publicado en GitHub Pages. Para refrescarlo abre GitHub Actions y ejecuta el workflow 'Dashboard mantenimiento', o espera la actualizacion programada.";
     btn.disabled = false;
@@ -404,6 +418,43 @@ async function refreshSharePoint() {{
   }} catch (err) {{
     status.classList.add("bad-text");
     status.textContent = "No se pudo refrescar desde esta pagina. Abre 08_DASHBOARD_INTERACTIVO_CON_BOTON.cmd y vuelve a intentar. Detalle: " + err.message;
+  }} finally {{
+    btn.disabled = false;
+  }}
+}}
+async function triggerGitHubWorkflow(btn, status) {{
+  const repo = GITHUB_REFRESH.repository;
+  const workflow = GITHUB_REFRESH.workflow;
+  const token = prompt("Pega un token de GitHub con permiso Actions: Read and write para ejecutar el dashboard. No se guarda en el HTML.");
+  if (!token) {{
+    status.textContent = "Actualizacion cancelada. No se ingreso token de GitHub.";
+    btn.disabled = false;
+    return;
+  }}
+  status.textContent = "Solicitando ejecucion en GitHub Actions...";
+  try {{
+    const res = await fetch(`https://api.github.com/repos/${{repo}}/actions/workflows/${{encodeURIComponent(workflow)}}/dispatches`, {{
+      method: "POST",
+      headers: {{
+        "Accept": "application/vnd.github+json",
+        "Authorization": `Bearer ${{token.trim()}}`,
+        "X-GitHub-Api-Version": "2022-11-28"
+      }},
+      body: JSON.stringify({{
+        ref: GITHUB_REFRESH.branch || "main",
+        inputs: {{ anio: GITHUB_REFRESH.anio, mes: GITHUB_REFRESH.mes }}
+      }})
+    }});
+    if (!res.ok) {{
+      const detail = await res.text();
+      throw new Error(`GitHub HTTP ${{res.status}}: ${{detail.slice(0, 400)}}`);
+    }}
+    const actionsUrl = `https://github.com/${{repo}}/actions/workflows/${{workflow}}`;
+    status.innerHTML = `Ejecucion solicitada en GitHub Actions. Cuando termine, descarga el artifact <strong>dashboard-mantenimiento</strong>. <a href="${{actionsUrl}}" target="_blank" rel="noopener">Abrir Actions</a>`;
+    window.open(actionsUrl, "_blank", "noopener");
+  }} catch (err) {{
+    status.classList.add("bad-text");
+    status.textContent = "No se pudo ejecutar GitHub Actions desde el HTML. Detalle: " + err.message;
   }} finally {{
     btn.disabled = false;
   }}
