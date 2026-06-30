@@ -8,16 +8,18 @@ Esta alternativa ejecuta el dashboard en la nube de GitHub, sin depender del equ
 2. Consulta SharePoint/OneDrive con Microsoft Graph.
 3. Descarga cronograma y PDFs.
 4. Ejecuta los mismos scripts Python del proyecto.
-5. Deja el HTML y reportes como artifact descargable.
+5. Deja el HTML y reportes como artifact descargable en `public`.
 
 ## Requisitos
 
 - Repositorio GitHub, idealmente privado.
 - GitHub Actions habilitado.
 - App Registration en Microsoft Entra ID con:
-  - `Sites.Read.All`
-  - `Files.Read.All`
+  - `Sites.Selected` de tipo aplicacion.
   - Admin consent aprobado.
+- La App Registration debe estar asignada con rol `Read` sobre el sitio espejo de Brillaseo.
+
+No se requiere `Sites.Read.All` ni `Files.Read.All` si `Sites.Selected` esta configurado correctamente sobre el sitio espejo.
 
 ## Secretos del repositorio
 
@@ -32,8 +34,8 @@ Crea estos secretos:
 | `TENANT_ID` | Tenant ID de Microsoft 365 |
 | `CLIENT_ID` | Application ID del App Registration |
 | `CLIENT_SECRET` | Secreto del App Registration |
-| `SUPPORTS_FOLDER_URL` | URL de la carpeta de soportes |
-| `CRONOGRAMA_URL` | URL del cronograma o carpeta del cronograma |
+| `SUPPORTS_FOLDER_URL` | URL de la carpeta de soportes en el espejo Brillaseo |
+| `CRONOGRAMA_URL` | URL del cronograma o carpeta del cronograma en el espejo Brillaseo |
 
 Opcionalmente crea esta variable:
 
@@ -77,6 +79,39 @@ El artifact incluye:
 - `metadata.json`
 - `validacion_soportes_sharepoint.xlsx`
 - `auditoria_soportes.xlsx`
+
+## Refrescar desde el HTML
+
+El dashboard generado incluye el boton `Refrescar SharePoint`.
+
+Cuando el HTML se genera desde GitHub Actions, ese boton puede disparar nuevamente el workflow en GitHub. Por seguridad, el token de GitHub no queda guardado dentro del HTML: la persona debe pegarlo cuando el navegador lo solicite.
+
+El token recomendado es un Fine-grained personal access token limitado a este repositorio con:
+
+- `Actions`: `Read and write`
+- `Contents`: `Read-only`
+
+Uso:
+
+1. Abrir `index.html`
+2. Clic en `Refrescar SharePoint`
+3. Pegar el token de GitHub cuando lo pida
+4. Esperar a que abra GitHub Actions
+5. Descargar el artifact `dashboard-mantenimiento` cuando termine
+
+Importante: este boton solo dispara GitHub Actions. Para que el workflow lea SharePoint, Microsoft 365 debe permitir la App Registration o el metodo de autenticacion configurado.
+
+## Publicar como GitHub Pages
+
+Si el repositorio es publico, puedes publicar la carpeta `public` con GitHub Pages. En repositorios privados, GitHub Pages puede requerir plan pago o Enterprise.
+
+La ruta mas simple es:
+
+1. Ejecutar el workflow.
+2. Descargar el artifact `dashboard-mantenimiento`.
+3. Si quieres publicarlo fijo, subir el contenido de `public` a una rama o carpeta configurada para Pages.
+
+Tambien se puede agregar un paso automatico de Pages, pero primero conviene validar que el workflow ya lee el espejo y genera `index.html`.
 
 ## Seguridad
 

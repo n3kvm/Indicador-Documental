@@ -35,7 +35,16 @@ def required_env(name):
     value = os.environ.get(name)
     if not value:
         raise RuntimeError(f"Falta configurar el secreto o variable {name}")
-    return value
+    return value.strip()
+
+
+def decode_jwt_payload(token):
+    try:
+        payload = token.split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        return json.loads(base64.urlsafe_b64decode(payload.encode("ascii")).decode("utf-8"))
+    except Exception:
+        return {}
 
 
 def period_from_env():
@@ -59,11 +68,31 @@ class GraphClient:
         if "access_token" not in token:
             raise RuntimeError(f"No se pudo obtener token Graph: {token}")
         self.headers = {"Authorization": f"Bearer {token['access_token']}"}
+        payload = decode_jwt_payload(token["access_token"])
+        roles = payload.get("roles") or []
+        print(f"Token Graph obtenido. Tenant token: {payload.get('tid', 'N/D')}. App: {payload.get('appid', 'N/D')}.")
+        print(f"Permisos Graph en token: {', '.join(roles) if roles else 'Sin roles de aplicacion'}")
+        if "Sites.Selected" in roles:
+            print("Modo Graph: Sites.Selected. La app solo podra leer sitios asignados explicitamente con rol Read.")
+        else:
+            print(
+                "ADVERTENCIA: el token no muestra Sites.Selected. "
+                "Si usas menor privilegio, revisa API permissions y Admin consent en Microsoft Entra."
+            )
 
     def get_json(self, url):
         res = requests.get(url, headers=self.headers, timeout=90)
         if not res.ok:
-            raise RuntimeError(f"Graph HTTP {res.status_code}: {res.text[:1200]}")
+            extra = ""
+            if res.status_code in (401, 403):
+                extra = (
+                    "\n\nPosibles causas:"
+                    "\n- TENANT_ID no corresponde al tenant donde vive el espejo."
+                    "\n- La App Registration no tiene Sites.Selected concedido con admin consent."
+                    "\n- Falta asignar la app con rol Read sobre el sitio espejo."
+                    "\n- El enlace pertenece a otro tenant o al OneDrive de otra organizacion."
+                )
+            raise RuntimeError(f"Graph HTTP {res.status_code}: {res.text[:1200]}{extra}")
         return res.json()
 
     def drive_item_from_share_url(self, share_url):

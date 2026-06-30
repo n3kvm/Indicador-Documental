@@ -93,28 +93,34 @@ html = f"""<!doctype html>
 <style>
 :root {{
   --bg:#f5f7fa; --panel:#fff; --ink:#17202a; --muted:#637083; --line:#dce3ec;
-  --blue:#155f9e; --red:#c63d3d; --green:#1f8a5b; --amber:#b7791f; --soft:#eef3f8;
+  --blue:#071936; --red:#c63d3d; --green:#1f8a5b; --amber:#b7791f; --soft:#eef3f8;
+  --brand:#7ee000;
   --shadow:0 10px 24px rgba(20,31,45,.08);
 }}
 *{{box-sizing:border-box}}
-body{{margin:0;background:var(--bg);color:var(--ink);font-family:Arial,Helvetica,sans-serif;font-size:14px;letter-spacing:0}}
-header{{background:#fff;border-bottom:1px solid var(--line);padding:18px 24px 14px;position:sticky;top:0;z-index:4}}
+body{{margin:0;background:var(--bg);color:var(--ink);font-family:Arial,Helvetica,sans-serif;font-size:14px;letter-spacing:0;position:relative;min-height:100vh}}
+body::before{{content:"Realizado por Bryan Martinez";position:fixed;left:50%;top:56%;transform:translate(-50%,-50%) rotate(-22deg);font-size:clamp(34px,6vw,86px);font-weight:900;letter-spacing:.04em;color:#071936;opacity:.045;white-space:nowrap;pointer-events:none;z-index:0}}
+header{{background:#071936;color:#fff;border-bottom:4px solid var(--brand);padding:0;position:sticky;top:0;z-index:4;box-shadow:0 10px 24px rgba(7,25,54,.22)}}
 .wrap{{max-width:1480px;margin:0 auto}}
-.top{{display:flex;align-items:flex-end;justify-content:space-between;gap:18px}}
-h1{{margin:0;font-size:23px;line-height:1.2}} .sub{{margin-top:4px;color:var(--muted);font-size:13px}}
-.filters{{display:grid;grid-template-columns:minmax(260px,1fr) 170px 170px 170px;gap:10px;margin-top:14px}}
-input,select,button{{height:36px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);padding:0 10px;font:inherit;min-width:0}}
+.hero{{display:grid;grid-template-columns:1fr 180px;gap:0;align-items:stretch;min-height:82px}}
+.hero-copy{{padding:12px 18px 10px}}
+.hero-brand{{background:#fff url('assets/logo_brillaseo.png') center/78% auto no-repeat;min-height:82px;clip-path:polygon(14% 0,100% 0,100% 100%,0 100%);border-left:4px solid var(--brand)}}
+.top{{display:flex;align-items:center;justify-content:space-between;gap:14px}}
+h1{{margin:0;font-size:18px;line-height:1.15}} .sub{{display:none}}
+.brand-accent{{color:#a9d800}}
+.filters{{display:grid;grid-template-columns:minmax(260px,1fr) 170px 170px 170px;gap:8px;margin-top:10px}}
+input,select,button{{height:34px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);padding:0 10px;font:inherit;min-width:0}}
 button{{cursor:pointer;background:#113c5f;color:#fff;border-color:#113c5f;font-weight:700}}
 button:disabled{{opacity:.65;cursor:wait}}
 .actions{{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}}
-.refresh-status{{min-height:18px;margin-top:8px;color:var(--muted);font-size:12px;text-align:right}}
+.refresh-status{{min-height:0;margin-top:4px;color:#dbe5ef;font-size:12px;text-align:right}}
 .refresh-status.bad-text{{color:#9c2d2d}}
-main{{max-width:1480px;margin:0 auto;padding:18px 24px 36px}}
+main{{max-width:1480px;margin:0 auto;padding:18px 24px 36px;position:relative;z-index:1}}
 .kpis{{display:grid;grid-template-columns:repeat(8,minmax(120px,1fr));gap:12px;margin-bottom:16px}}
-.metric{{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 13px;box-shadow:var(--shadow);min-height:82px}}
+.metric{{background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:8px;padding:12px 13px;box-shadow:var(--shadow);min-height:82px;backdrop-filter:blur(2px)}}
 .metric span{{display:block;color:var(--muted);font-size:12px;margin-bottom:8px}} .metric strong{{font-size:24px;line-height:1}}
 .grid{{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}}
-section{{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;box-shadow:var(--shadow);margin-bottom:16px}}
+section{{background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:8px;padding:16px;box-shadow:var(--shadow);margin-bottom:16px;backdrop-filter:blur(2px)}}
 h2{{font-size:16px;margin:0 0 12px}}
 .tabs{{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}} .tab{{background:#fff;color:var(--ink);border-color:var(--line);padding:0 12px}} .tab.active{{background:#113c5f;color:#fff;border-color:#113c5f}}
 .table-wrap{{overflow:auto;max-height:590px;border:1px solid var(--line);border-radius:8px}} table{{width:100%;border-collapse:collapse;min-width:1050px;background:#fff}}
@@ -140,12 +146,13 @@ td.num,th.num{{text-align:right;font-variant-numeric:tabular-nums}} tr:hover td{
 .day-kpi span{{display:block;color:var(--muted);font-size:12px;margin-bottom:6px}} .day-kpi strong{{font-size:22px}}
 .hidden{{display:none}} .small{{color:var(--muted);font-size:12px}}
 a{{color:var(--blue);text-decoration:none}} a:hover{{text-decoration:underline}}
-@media(max-width:1120px){{.filters,.kpis,.grid,.day-kpis{{grid-template-columns:1fr 1fr}}}} @media(max-width:740px){{header{{position:static;padding:16px}}main{{padding:16px}}.top{{align-items:flex-start;flex-direction:column}}.filters,.kpis,.grid,.day-kpis{{grid-template-columns:1fr}}h1{{font-size:20px}}.bar{{grid-template-columns:1fr}}}}
+@media(max-width:1120px){{.filters,.kpis,.grid,.day-kpis{{grid-template-columns:1fr 1fr}}}} @media(max-width:740px){{header{{position:static}}.hero{{grid-template-columns:1fr}}.hero-brand{{min-height:72px;clip-path:none}}.hero-copy{{padding:12px}}main{{padding:16px}}.top{{align-items:flex-start;flex-direction:column}}.filters,.kpis,.grid,.day-kpis{{grid-template-columns:1fr}}h1{{font-size:18px}}.bar{{grid-template-columns:1fr}}}}
 </style>
 </head>
 <body>
 <header>
-  <div class="wrap">
+  <div class="hero wrap">
+    <div class="hero-copy">
     <div class="top">
       <div>
         <h1>Validación de soportes, pilares y horas - {CARPETA_MES} {ANIO}</h1>
@@ -163,6 +170,8 @@ a{{color:var(--blue);text-decoration:none}} a:hover{{text-decoration:underline}}
       <select id="ues"><option value="all">Todas las UES</option></select>
       <select id="onlyAlerts"><option value="all">Todas las filas</option><option value="alerts">Solo alertas</option></select>
     </div>
+    </div>
+    <div class="hero-brand" aria-label="Marca corporativa Brillaseo"></div>
   </div>
 </header>
 <main>
@@ -390,7 +399,8 @@ function csv() {{
 async function refreshSharePoint() {{
   const btn=$("refreshBtn");
   const status=$("refreshStatus");
-  const endpoint = REFRESH_ENDPOINT || (location.protocol === "file:" ? "http://127.0.0.1:8787/refresh" : (location.hostname === "127.0.0.1" || location.hostname === "localhost" ? "/refresh" : ""));
+  const localHttp = location.protocol === "http:" && !GITHUB_REFRESH.repository;
+  const endpoint = REFRESH_ENDPOINT || (location.protocol === "file:" ? "http://127.0.0.1:8787/refresh" : (localHttp ? "/refresh" : ""));
   btn.disabled = true;
   status.classList.remove("bad-text");
   if (!endpoint) {{
