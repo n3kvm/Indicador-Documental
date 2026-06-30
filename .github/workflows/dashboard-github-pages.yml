@@ -1,10 +1,10 @@
-﻿name: Dashboard mantenimiento
+name: Dashboard mantenimiento
 
 on:
   workflow_dispatch:
     inputs:
       anio:
-        description: "Anio a consultar. Dejar vacio para mes actual Colombia."
+        description: "Año a consultar. Dejar vacio para mes actual Colombia."
         required: false
         type: string
       mes:
@@ -56,6 +56,7 @@ jobs:
           PUBLISH_FOLDER_PATH: ${{ vars.PUBLISH_FOLDER_PATH || 'Dashboard Mantenimiento' }}
           PUBLISH_TO_SHAREPOINT: ${{ vars.PUBLISH_TO_SHAREPOINT || '0' }}
           DASHBOARD_ROUTE_NAME: ${{ vars.DASHBOARD_ROUTE_NAME || 'GITHUB' }}
+          DASHBOARD_REFRESH_ENDPOINT: ${{ vars.DASHBOARD_REFRESH_ENDPOINT || secrets.DASHBOARD_REFRESH_ENDPOINT || '' }}
           DASHBOARD_YEAR: ${{ inputs.anio }}
           DASHBOARD_MONTH: ${{ inputs.mes }}
         run: python github_actions/generate_dashboard.py
@@ -78,3 +79,4 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
