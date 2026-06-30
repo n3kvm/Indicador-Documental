@@ -467,6 +467,7 @@ def main():
     month_name = MONTHS[month]
     folder_month = f"{month:02d}-{month_name}"
     route_name = os.environ.get("DASHBOARD_ROUTE_NAME", "GITHUB")
+    print(f"DASHBOARD_REFRESH_ENDPOINT configurado: {'SI' if os.environ.get('DASHBOARD_REFRESH_ENDPOINT', '').strip() else 'NO'}")
 
     supports_url = required_env("SUPPORTS_FOLDER_URL")
     cronograma_url = required_env("CRONOGRAMA_URL")
