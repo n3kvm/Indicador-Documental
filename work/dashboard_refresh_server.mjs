@@ -145,7 +145,7 @@ iframe{width:100%;height:calc(100vh - 228px);min-height:520px;border:1px solid v
       <div class="app-copy">
         <div class="eyebrow">Panel de ejecucion</div>
         <h1>Centro de control <span class="accent">documental</span></h1>
-        <div class="sub">Servidor ${escapeHtml(reqHost || "")}. Primero usa los soportes sincronizados en OneDrive; si no los encuentra, consulta SharePoint y genera el reporte.</div>
+        <div class="sub">Servidor ${escapeHtml(reqHost || "")}. Consulta SharePoint con la sesión del equipo servidor y genera el reporte documental.</div>
       </div>
     </div>
     <div class="maker-mark">Realizado por Bryan Martinez</div>
@@ -157,7 +157,7 @@ iframe{width:100%;height:calc(100vh - 228px);min-height:520px;border:1px solid v
       <label>Año <input name="anio" value="${escapeHtml(defaultYear)}" inputmode="numeric" required></label>
       <label>Mes <input name="mes" value="${escapeHtml(defaultMonth)}" inputmode="numeric" required></label>
       <label>Nombre corto <input name="nombreRuta" value="${escapeHtml(nombreRuta || "RED")}"></label>
-      <label>URL soportes <input name="soportesUrl" value="${escapeHtml(soportesUrl)}" placeholder="Pega la URL de soportes; si está sincronizada se lee localmente" required></label>
+      <label>URL soportes <input name="soportesUrl" value="${escapeHtml(soportesUrl)}" placeholder="Pega la URL de la carpeta de soportes PDF" required></label>
       <label>URL cronograma <input name="cronogramaUrl" value="${escapeHtml(cronogramaUrl)}" placeholder="Pega la carpeta o archivo del cronograma" required></label>
       <button id="runBtn" type="submit">Generar / actualizar</button>
     </form>
@@ -395,6 +395,7 @@ server.listen(port, host, () => {
     spawn("cmd.exe", ["/c", "start", "", localUrl], { detached: true, stdio: "ignore" }).unref();
   }
 });
+
 
 
 

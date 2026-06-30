@@ -60,21 +60,26 @@ function requestBuffer(url, headers = {}, redirects = 0) {
 }
 
 async function getCookieHeader(origin) {
-  const version = await requestJson("http://127.0.0.1:9222/json/version");
-  if (!version.webSocketDebuggerUrl) throw new Error("Edge no expuso WebSocket de depuracion en 9222.");
-  const ws = new WebSocket(version.webSocketDebuggerUrl);
+  const tabs = await requestJson("http://127.0.0.1:9222/json");
+  const page = tabs.find((t) => t.type === "page" && t.webSocketDebuggerUrl);
+  if (!page) throw new Error("No hay pestanas controlables en Edge. Abre Edge desde el script y completa el inicio de sesion.");
+
+  const ws = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => {
     ws.addEventListener("open", resolve, { once: true });
     ws.addEventListener("error", reject, { once: true });
   });
   let id = 1;
-  function send(method, params) {
+  function send(method, params = {}) {
     const msgId = id++;
     ws.send(JSON.stringify({ id: msgId, method, params }));
     return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error(`Timeout esperando ${method}`)), 60000);
       const onMessage = (event) => {
-        const data = JSON.parse(event.data.toString());
+        const raw = event.data ?? event;
+        const data = JSON.parse(typeof raw === "string" ? raw : raw.toString());
         if (data.id !== msgId) return;
+        clearTimeout(timeout);
         ws.removeEventListener("message", onMessage);
         if (data.error) reject(new Error(data.error.message || JSON.stringify(data.error)));
         else resolve(data.result || {});
@@ -82,13 +87,14 @@ async function getCookieHeader(origin) {
       ws.addEventListener("message", onMessage);
     });
   }
+
+  await send("Network.enable");
   const result = await send("Network.getCookies", { urls: [origin] });
   ws.close();
   const cookieHeader = (result.cookies || []).map((c) => `${c.name}=${c.value}`).join("; ");
   if (!cookieHeader) throw new Error("No encontre cookies de SharePoint en Edge. Inicia sesion en la ventana abierta y vuelve a ejecutar.");
   return cookieHeader;
 }
-
 function absoluteDownloadUrl(file, origin) {
   if (file.ServerRelativeUrl) return `${origin}${encodeURI(file.ServerRelativeUrl)}`;
   if (file.webUrl) return file.webUrl;
@@ -152,3 +158,4 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+

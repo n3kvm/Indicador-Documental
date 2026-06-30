@@ -143,10 +143,23 @@ class GraphClient:
         if rel_parts and rel_parts[0].lower() in {"shared documents", "documentos compartidos", "documents"}:
             rel_parts = rel_parts[1:]
         rel_path = "/".join(rel_parts).strip("/")
+        root = self.get_json(f"https://graph.microsoft.com/v1.0/drives/{drive['id']}/root")
         if not rel_path:
-            return self.get_json(f"https://graph.microsoft.com/v1.0/drives/{drive['id']}/root")
-        encoded = quote(rel_path, safe="/")
-        return self.get_json(f"https://graph.microsoft.com/v1.0/drives/{drive['id']}/root:/{encoded}:")
+            return root
+        print(f"Resolviendo ruta en drive por segmentos: {rel_path}")
+        return self.drive_item_by_segments(root, rel_parts)
+
+    def drive_item_by_segments(self, root_item, rel_parts):
+        current = root_item
+        ignored = {"shared documents", "documentos compartidos", "documents"}
+        for segment in [p for p in rel_parts if p and p.lower() not in ignored]:
+            children = self.children(current)
+            match = next((item for item in children if item.get("name", "").lower() == segment.lower()), None)
+            if not match:
+                available = " | ".join(sorted(item.get("name", "") for item in children)[:40])
+                raise RuntimeError(f"No encontre '{segment}' dentro de '{current.get('name', 'root')}'. Disponibles: {available}")
+            current = match
+        return current
 
     def children(self, item):
         drive_id = item["parentReference"]["driveId"]
@@ -352,6 +365,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
