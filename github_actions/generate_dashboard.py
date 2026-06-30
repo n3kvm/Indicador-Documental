@@ -2,10 +2,12 @@
 import json
 import os
 import posixpath
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
@@ -265,6 +267,40 @@ def safe_name(name):
     return " ".join("".join("_" if ch in bad else ch for ch in name).split())
 
 
+def normalize_folder_name(value):
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.upper()
+    text = re.sub(r"[^A-Z0-9]+", "", text)
+    return text
+
+
+def find_child_folder(graph, parent, expected_names, label):
+    expected = {normalize_folder_name(name) for name in expected_names if str(name or "").strip()}
+    children = graph.children(parent)
+    folders = [item for item in children if "folder" in item]
+    for item in folders:
+        if normalize_folder_name(item.get("name", "")) in expected:
+            return item
+    available = " | ".join(item.get("name", "") for item in folders) or "sin subcarpetas"
+    wanted = " | ".join(expected_names)
+    raise RuntimeError(f"No encontre la carpeta {label}. Esperaba: {wanted}. Disponibles: {available}")
+
+
+def resolve_support_period_folder(graph, supports_root, year, month, month_name):
+    year_folder = find_child_folder(graph, supports_root, [str(year)], f"del anio {year}")
+    month_candidates = [
+        f"{month:02d}-{month_name}",
+        f"{month:02d} - {month_name}",
+        f"{month:02d}_{month_name}",
+        f"{month:02d} {month_name}",
+        month_name,
+        str(month),
+        f"{month:02d}",
+    ]
+    return find_child_folder(graph, year_folder, month_candidates, f"del mes {month:02d}-{month_name}")
+
+
 def server_relative_from_web_url(web_url):
     parsed = urlparse(web_url or "")
     return unquote(parsed.path)
@@ -412,7 +448,9 @@ def main():
 
     print(f"Periodo: {year}-{month:02d} {month_name}")
     print("Listando soportes...")
-    supports_item = graph.drive_item_from_share_url(supports_url)
+    supports_root_item = graph.drive_item_from_share_url(supports_url)
+    supports_item = resolve_support_period_folder(graph, supports_root_item, year, month, month_name)
+    print(f"Carpeta de soportes seleccionada: {supports_item.get('name')}")
     support_items = [item for item in graph.list_recursive(supports_item) if item.get("name", "").lower().endswith(".pdf")]
 
     print("Buscando cronograma...")
