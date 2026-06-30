@@ -305,6 +305,36 @@ def run_step(script, cwd, env):
     print(result.stdout)
     if result.returncode:
         raise RuntimeError(f"Fallo {script.name}\nSTDOUT:\n{result.stdout[-3000:]}\nSTDERR:\n{result.stderr[-3000:]}")
+def build_portal_html(metadata):
+    generated = metadata.get("generated_at", "")[:16].replace("T", " ")
+    period = f"{metadata.get('month', '')}-{metadata.get('month_name', '')} {metadata.get('year', '')}"
+    support_files = metadata.get("support_files", 0)
+    cronograma = metadata.get("cronograma") or "Cronograma consultado"
+    return f'''<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Indicador Documental</title>
+  <style>
+    :root{{--blue:#071936;--green:#7ee000;--ink:#17202a;--muted:#5f7088;--line:#d9e2ec;--bg:#f4f7fb;--card:#fff;--red:#d33f49;--gold:#c58b00}}
+    *{{box-sizing:border-box}}body{{margin:0;background:var(--bg);font-family:Arial,Helvetica,sans-serif;color:var(--ink)}}
+    .page{{max-width:1180px;margin:0 auto;padding:28px 20px 44px}}.hero{{background:var(--blue);color:white;border-radius:10px;overflow:hidden;position:relative;box-shadow:0 16px 38px rgba(7,25,54,.18)}}
+    .hero:after{{content:"";position:absolute;right:-72px;top:-100px;width:380px;height:380px;border:34px solid rgba(126,224,0,.22);transform:rotate(18deg);border-radius:34px}}.hero-inner{{position:relative;z-index:1;padding:34px 38px;display:grid;grid-template-columns:1fr auto;gap:24px;align-items:center}}.eyebrow{{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.16em;color:var(--green);margin-bottom:10px}}.hero h1{{margin:0;font-size:34px;line-height:1.08}}.hero p{{margin:12px 0 0;max-width:760px;color:#dce7f4;font-size:16px;line-height:1.45}}.mark{{border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:10px 16px;font-size:12px;text-transform:uppercase;letter-spacing:.12em;font-weight:800;white-space:nowrap}}.actions{{display:flex;gap:12px;flex-wrap:wrap;margin-top:24px}}.btn{{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 18px;border-radius:7px;text-decoration:none;font-weight:800}}.btn.primary{{background:var(--green);color:#071936}}.btn.secondary{{background:#123e66;color:white;border:1px solid rgba(255,255,255,.18)}}
+    .grid{{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:18px 0}}.metric,.panel{{background:var(--card);border:1px solid var(--line);border-radius:9px;box-shadow:0 10px 28px rgba(30,45,65,.07)}}.metric{{padding:18px}}.metric span{{display:block;color:var(--muted);font-size:13px;margin-bottom:8px}}.metric strong{{font-size:30px}}.metric.ok strong{{color:#21885f}}.metric.warn strong{{color:var(--gold)}}.metric.bad strong{{color:var(--red)}}
+    .layout{{display:grid;grid-template-columns:1.15fr .85fr;gap:18px}}.panel{{padding:22px}}.panel h2{{margin:0 0 14px;font-size:21px;color:var(--blue)}}.panel p{{color:var(--muted);line-height:1.5}}.link-card{{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;padding:14px;border:1px solid var(--line);border-radius:8px;margin-top:10px;background:#fbfdff;text-decoration:none;color:inherit}}.icon{{width:38px;height:38px;border-radius:8px;background:#eaf5ff;color:#0a4d7a;display:flex;align-items:center;justify-content:center;font-weight:900}}.link-card b{{display:block}}.link-card small{{color:var(--muted)}}.pill{{font-size:12px;font-weight:800;border-radius:999px;padding:7px 10px;background:#eef5e8;color:#467500}}.steps{{counter-reset:item;display:grid;gap:10px}}.step{{display:grid;grid-template-columns:34px 1fr;gap:12px;align-items:start}}.step:before{{counter-increment:item;content:counter(item);width:34px;height:34px;border-radius:50%;background:var(--blue);color:white;display:flex;align-items:center;justify-content:center;font-weight:800}}.footer{{margin-top:18px;color:var(--muted);font-size:12px;text-align:center}}
+    @media(max-width:900px){{.hero-inner,.layout{{grid-template-columns:1fr}}.grid{{grid-template-columns:repeat(2,1fr)}}.hero h1{{font-size:28px}}.mark{{width:max-content}}}}@media(max-width:560px){{.grid{{grid-template-columns:1fr}}.hero-inner{{padding:26px 22px}}}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero"><div class="hero-inner"><div><div class="eyebrow">Indicador documental</div><h1>Dashboard mantenimiento preventivo</h1><p>Consulta centralizada de soportes cargados, checklist esperados, pilares de mantenimiento, horas calculadas y alertas documentales.</p><div class="actions"><a class="btn primary" href="dashboard.html">Abrir dashboard</a><a class="btn secondary" href="validacion_soportes_sharepoint.xlsx">Descargar validación</a><a class="btn secondary" href="auditoria_soportes.xlsx">Descargar auditoría</a></div></div><div class="mark">Realizado por Bryan Martinez</div></div></section>
+    <section class="grid" aria-label="Resumen del reporte"><div class="metric ok"><span>Estado</span><strong>Activo</strong></div><div class="metric"><span>Periodo</span><strong>{period}</strong></div><div class="metric warn"><span>PDFs leídos</span><strong>{support_files}</strong></div><div class="metric bad"><span>Actualizado</span><strong>{generated}</strong></div></section>
+    <section class="layout"><article class="panel"><h2>Accesos principales</h2><a class="link-card" href="dashboard.html"><div class="icon">ID</div><div><b>Dashboard interactivo</b><small>Vista HTML con filtros, alertas, archivos, pilares y cálculo por días.</small></div><span class="pill">HTML</span></a><a class="link-card" href="validacion_soportes_sharepoint.xlsx"><div class="icon">XL</div><div><b>Validación de soportes</b><small>Comparativo cronograma, esperado y SharePoint por sede.</small></div><span class="pill">Excel</span></a><a class="link-card" href="auditoria_soportes.xlsx"><div class="icon">AU</div><div><b>Auditoría del cronograma</b><small>{cronograma}</small></div><span class="pill">Excel</span></a></article><aside class="panel"><h2>Cómo usar</h2><div class="steps"><div class="step"><div><b>Abrir dashboard</b><p>Usa el botón principal para revisar el consolidado del mes publicado.</p></div></div><div class="step"><div><b>Filtrar alertas</b><p>Revisa faltantes, diferencias de horas, autogestiones y actividades con cobro.</p></div></div><div class="step"><div><b>Descargar soporte</b><p>Usa los reportes Excel cuando necesites enviar evidencias o hacer revisión detallada.</p></div></div></div></aside></section>
+    <div class="footer">Brillaseo SAS - Gestión Locativa Integral - Indicador documental</div>
+  </main>
+</body>
+</html>'''
 
 
 def main():
@@ -403,7 +433,7 @@ def main():
     ]:
         run_step(work_scripts / script_name, run_root, env)
 
-    shutil.copy2(dashboard_output, public_dir / "index.html")
+    shutil.copy2(dashboard_output, public_dir / "dashboard.html")
     if compare_output.exists():
         shutil.copy2(compare_output, public_dir / "validacion_soportes_sharepoint.xlsx")
     if audit_output.exists():
@@ -418,6 +448,7 @@ def main():
         "support_files": len(support_items),
         "cronograma": selected_cron.get("name"),
     }
+    (public_dir / "index.html").write_text(build_portal_html(metadata), encoding="utf-8")
     metadata_path = public_dir / "metadata.json"
     metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -428,7 +459,7 @@ def main():
         published = []
         try:
             folder = graph.ensure_folder(publish_site_url, publish_folder)
-            for file_path in [public_dir / "index.html", public_dir / "metadata.json", public_dir / "validacion_soportes_sharepoint.xlsx", public_dir / "auditoria_soportes.xlsx"]:
+            for file_path in [public_dir / "index.html", public_dir / "dashboard.html", public_dir / "metadata.json", public_dir / "validacion_soportes_sharepoint.xlsx", public_dir / "auditoria_soportes.xlsx"]:
                 if file_path.exists():
                     uploaded = graph.upload_to_folder(folder, file_path)
                     published.append({"name": file_path.name, "webUrl": uploaded.get("webUrl", "")})
@@ -446,6 +477,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
 
 
 
