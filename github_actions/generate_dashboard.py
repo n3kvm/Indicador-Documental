@@ -287,8 +287,13 @@ def find_child_folder(graph, parent, expected_names, label):
     raise RuntimeError(f"No encontre la carpeta {label}. Esperaba: {wanted}. Disponibles: {available}")
 
 
+def folder_name_matches(item, expected_names):
+    current = normalize_folder_name(item.get("name", ""))
+    expected = {normalize_folder_name(name) for name in expected_names if str(name or "").strip()}
+    return current in expected
+
+
 def resolve_support_period_folder(graph, supports_root, year, month, month_name):
-    year_folder = find_child_folder(graph, supports_root, [str(year)], f"del anio {year}")
     month_candidates = [
         f"{month:02d}-{month_name}",
         f"{month:02d} - {month_name}",
@@ -298,7 +303,35 @@ def resolve_support_period_folder(graph, supports_root, year, month, month_name)
         str(month),
         f"{month:02d}",
     ]
-    return find_child_folder(graph, year_folder, month_candidates, f"del mes {month:02d}-{month_name}")
+    year_candidates = [str(year)]
+
+    root_name = supports_root.get("name", "")
+    if folder_name_matches(supports_root, month_candidates):
+        print(f"La URL de soportes ya apunta al mes solicitado: {root_name}")
+        return supports_root
+
+    if folder_name_matches(supports_root, year_candidates):
+        print(f"La URL de soportes apunta al anio solicitado: {root_name}")
+        return find_child_folder(graph, supports_root, month_candidates, f"del mes {month:02d}-{month_name}")
+
+    root_children = [item for item in graph.children(supports_root) if "folder" in item]
+
+    direct_month = next((item for item in root_children if folder_name_matches(item, month_candidates)), None)
+    if direct_month:
+        print(f"Mes encontrado directamente dentro de la URL base: {direct_month.get('name')}")
+        return direct_month
+
+    year_folder = next((item for item in root_children if folder_name_matches(item, year_candidates)), None)
+    if year_folder:
+        print(f"Anio encontrado dentro de la URL base: {year_folder.get('name')}")
+        return find_child_folder(graph, year_folder, month_candidates, f"del mes {month:02d}-{month_name}")
+
+    available = " | ".join(item.get("name", "") for item in root_children) or "sin subcarpetas"
+    raise RuntimeError(
+        f"No pude ubicar la carpeta de soportes para {year}/{month:02d}-{month_name}. "
+        f"La URL base apunta a '{root_name}' y contiene: {available}. "
+        "La URL debe apuntar a Soportes, al anio o al mes especifico."
+    )
 
 
 def server_relative_from_web_url(web_url):
@@ -452,6 +485,7 @@ def main():
     supports_item = resolve_support_period_folder(graph, supports_root_item, year, month, month_name)
     print(f"Carpeta de soportes seleccionada: {supports_item.get('name')}")
     support_items = [item for item in graph.list_recursive(supports_item) if item.get("name", "").lower().endswith(".pdf")]
+    print(f"PDFs encontrados en {year}/{folder_month}: {len(support_items)}")
 
     print("Buscando cronograma...")
     cronograma_item = graph.drive_item_from_share_url(cronograma_url)
