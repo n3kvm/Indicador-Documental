@@ -101,12 +101,23 @@ class GraphClient:
     def drive_item_from_share_url(self, share_url):
         parsed = urlparse(share_url or "")
         if parsed.netloc.endswith(".sharepoint.com"):
-            try:
-                return self.drive_item_from_sharepoint_url(share_url)
-            except Exception as err:
-                print(f"No pude resolver URL directa de SharePoint; intento endpoint /shares. Detalle: {err}")
+            return self.drive_item_from_sharepoint_url(share_url)
         share_id = "u!" + base64.urlsafe_b64encode(share_url.encode("utf-8")).decode("ascii").rstrip("=")
         return self.get_json(f"https://graph.microsoft.com/v1.0/shares/{share_id}/driveItem")
+
+    def configured_site_path(self, hostname):
+        configured = os.environ.get("SHAREPOINT_SITE_PATH") or os.environ.get("SHAREPOINT_SITE_URL") or ""
+        if configured:
+            parsed = urlparse(configured)
+            path_value = parsed.path if parsed.scheme else configured
+            path_value = unquote(path_value).strip("/")
+            parts = [p for p in path_value.split("/") if p]
+            site_index = next((i for i, p in enumerate(parts) if p.lower() in {"sites", "teams", "personal"}), None)
+            if site_index is not None and site_index + 1 < len(parts):
+                return "/" + "/".join(parts[site_index:site_index + 2])
+        if hostname.lower() == "brillaseo2.sharepoint.com":
+            return "/sites/SoportesEspejo"
+        return ""
 
     def drive_item_from_sharepoint_url(self, share_url):
         parsed = urlparse(share_url)
@@ -117,11 +128,18 @@ class GraphClient:
         parts = [p for p in folder_path.split("/") if p]
         site_index = next((i for i, p in enumerate(parts) if p.lower() in {"sites", "teams", "personal"}), None)
         if site_index is None or site_index + 1 >= len(parts):
-            raise RuntimeError(f"No pude detectar el sitio en la URL: {share_url}")
-        site_path = "/" + "/".join(parts[site_index:site_index + 2])
+            site_path = self.configured_site_path(parsed.netloc)
+            if not site_path:
+                raise RuntimeError(
+                    "No pude detectar el sitio en SUPPORTS_FOLDER_URL/CRONOGRAMA_URL. "
+                    "Configura SHAREPOINT_SITE_PATH como /sites/SoportesEspejo o usa una URL directa del sitio."
+                )
+            rel_parts = parts
+        else:
+            site_path = "/" + "/".join(parts[site_index:site_index + 2])
+            rel_parts = parts[site_index + 2:]
         site = self.get_json(f"https://graph.microsoft.com/v1.0/sites/{parsed.netloc}:{site_path}")
         drive = self.get_json(f"https://graph.microsoft.com/v1.0/sites/{site['id']}/drive")
-        rel_parts = parts[site_index + 2:]
         if rel_parts and rel_parts[0].lower() in {"shared documents", "documentos compartidos", "documents"}:
             rel_parts = rel_parts[1:]
         rel_path = "/".join(rel_parts).strip("/")
@@ -334,5 +352,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
