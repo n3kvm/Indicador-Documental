@@ -1,4 +1,4 @@
-import base64
+﻿import base64
 import json
 import os
 import posixpath
@@ -8,7 +8,7 @@ import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlparse
 from zoneinfo import ZoneInfo
 
 import msal
@@ -33,7 +33,7 @@ MONTHS = {
 
 def required_env(name):
     value = os.environ.get(name)
-    if not value:
+    if not value or not value.strip():
         raise RuntimeError(f"Falta configurar el secreto o variable {name}")
     return value.strip()
 
@@ -81,6 +81,8 @@ class GraphClient:
             )
 
     def get_json(self, url):
+        if not self.headers.get("Authorization", "").replace("Bearer", "").strip():
+            raise RuntimeError("Token Graph vacio: revisa TENANT_ID, CLIENT_ID y CLIENT_SECRET en GitHub Secrets.")
         res = requests.get(url, headers=self.headers, timeout=90)
         if not res.ok:
             extra = ""
@@ -91,13 +93,42 @@ class GraphClient:
                     "\n- La App Registration no tiene Sites.Selected concedido con admin consent."
                     "\n- Falta asignar la app con rol Read sobre el sitio espejo."
                     "\n- El enlace pertenece a otro tenant o al OneDrive de otra organizacion."
+                    "\n- Si usas Sites.Selected, evita enlaces compartidos /shares y usa URL directa del sitio espejo."
                 )
             raise RuntimeError(f"Graph HTTP {res.status_code}: {res.text[:1200]}{extra}")
         return res.json()
 
     def drive_item_from_share_url(self, share_url):
+        parsed = urlparse(share_url or "")
+        if parsed.netloc.endswith(".sharepoint.com"):
+            try:
+                return self.drive_item_from_sharepoint_url(share_url)
+            except Exception as err:
+                print(f"No pude resolver URL directa de SharePoint; intento endpoint /shares. Detalle: {err}")
         share_id = "u!" + base64.urlsafe_b64encode(share_url.encode("utf-8")).decode("ascii").rstrip("=")
         return self.get_json(f"https://graph.microsoft.com/v1.0/shares/{share_id}/driveItem")
+
+    def drive_item_from_sharepoint_url(self, share_url):
+        parsed = urlparse(share_url)
+        raw_path = parse_qs(parsed.query).get("id", [""])[0]
+        folder_path = unquote(raw_path) if raw_path else unquote(parsed.path)
+        if "/Forms/" in folder_path:
+            folder_path = folder_path.split("/Forms/", 1)[0]
+        parts = [p for p in folder_path.split("/") if p]
+        site_index = next((i for i, p in enumerate(parts) if p.lower() in {"sites", "teams", "personal"}), None)
+        if site_index is None or site_index + 1 >= len(parts):
+            raise RuntimeError(f"No pude detectar el sitio en la URL: {share_url}")
+        site_path = "/" + "/".join(parts[site_index:site_index + 2])
+        site = self.get_json(f"https://graph.microsoft.com/v1.0/sites/{parsed.netloc}:{site_path}")
+        drive = self.get_json(f"https://graph.microsoft.com/v1.0/sites/{site['id']}/drive")
+        rel_parts = parts[site_index + 2:]
+        if rel_parts and rel_parts[0].lower() in {"shared documents", "documentos compartidos", "documents"}:
+            rel_parts = rel_parts[1:]
+        rel_path = "/".join(rel_parts).strip("/")
+        if not rel_path:
+            return self.get_json(f"https://graph.microsoft.com/v1.0/drives/{drive['id']}/root")
+        encoded = quote(rel_path, safe="/")
+        return self.get_json(f"https://graph.microsoft.com/v1.0/drives/{drive['id']}/root:/{encoded}:")
 
     def children(self, item):
         drive_id = item["parentReference"]["driveId"]
@@ -303,3 +334,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 import re
 import unicodedata
@@ -40,7 +40,7 @@ def sharepoint_file_view_url(file_row):
     origin = file_row.get("SiteOrigin") or "https://comfandisa.sharepoint.com"
     server_relative = file_row.get("ServerRelativeUrl", "")
     if not server_relative:
-        return ""
+        return file_row.get("WebUrl") or file_row.get("webUrl") or ""
     encoded_path = quote(server_relative, safe="/")
     return f"{origin}/:b:/r{encoded_path}?csf=1&web=1"
 
@@ -555,3 +555,4 @@ print(json.dumps({
     "checklists_digitados_falta_cargar": sum(row["cantidad_digitada_falta_cargar"] for row in calendar_rows),
     "output": str(OUT),
 }, ensure_ascii=False, indent=2))
+
