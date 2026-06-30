@@ -1,0 +1,4 @@
+msal
+openpyxl
+pypdf
+requests
