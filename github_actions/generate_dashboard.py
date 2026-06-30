@@ -100,8 +100,15 @@ class GraphClient:
 
     def drive_item_from_share_url(self, share_url):
         parsed = urlparse(share_url or "")
+        # Los enlaces compartidos de SharePoint/OneDrive vienen como /:f:/s/... o /:x:/r/...
+        # Esos no son rutas reales del drive; se resuelven con el endpoint /shares.
+        if parsed.path.startswith("/:"):
+            return self.drive_item_from_encoded_share(share_url)
         if parsed.netloc.endswith(".sharepoint.com"):
             return self.drive_item_from_sharepoint_url(share_url)
+        return self.drive_item_from_encoded_share(share_url)
+
+    def drive_item_from_encoded_share(self, share_url):
         share_id = "u!" + base64.urlsafe_b64encode(share_url.encode("utf-8")).decode("ascii").rstrip("=")
         return self.get_json(f"https://graph.microsoft.com/v1.0/shares/{share_id}/driveItem")
 
@@ -365,6 +372,8 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
 
 
 
