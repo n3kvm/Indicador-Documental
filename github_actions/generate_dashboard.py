@@ -97,6 +97,58 @@ class GraphClient:
                 )
             raise RuntimeError(f"Graph HTTP {res.status_code}: {res.text[:1200]}{extra}")
         return res.json()
+    def post_json(self, url, body):
+        res = requests.post(url, headers={**self.headers, "Content-Type": "application/json"}, json=body, timeout=90)
+        if not res.ok:
+            raise RuntimeError(f"Graph POST HTTP {res.status_code}: {res.text[:1200]}")
+        return res.json()
+
+    def put_bytes(self, url, data, content_type="application/octet-stream"):
+        res = requests.put(url, headers={**self.headers, "Content-Type": content_type}, data=data, timeout=300)
+        if not res.ok:
+            raise RuntimeError(f"Graph PUT HTTP {res.status_code}: {res.text[:1200]}")
+        return res.json()
+
+    def site_and_drive_from_url(self, site_url):
+        parsed = urlparse(site_url)
+        parts = [p for p in unquote(parsed.path).split("/") if p]
+        site_index = next((i for i, p in enumerate(parts) if p.lower() in {"sites", "teams", "personal"}), None)
+        if site_index is None or site_index + 1 >= len(parts):
+            site_path = self.configured_site_path(parsed.netloc)
+            if not site_path:
+                raise RuntimeError(f"No pude detectar el sitio de publicacion en {site_url}")
+        else:
+            site_path = "/" + "/".join(parts[site_index:site_index + 2])
+        site = self.get_json(f"https://graph.microsoft.com/v1.0/sites/{parsed.netloc}:{site_path}")
+        drive = self.get_json(f"https://graph.microsoft.com/v1.0/sites/{site['id']}/drive")
+        return site, drive
+
+    def ensure_folder(self, site_url, folder_path):
+        _, drive = self.site_and_drive_from_url(site_url)
+        current = self.get_json(f"https://graph.microsoft.com/v1.0/drives/{drive['id']}/root")
+        for segment in [p for p in folder_path.replace("\\", "/").split("/") if p.strip()]:
+            children = self.children(current)
+            match = next((item for item in children if "folder" in item and item.get("name", "").lower() == segment.lower()), None)
+            if not match:
+                match = self.post_json(
+                    f"https://graph.microsoft.com/v1.0/drives/{drive['id']}/items/{current['id']}/children",
+                    {"name": segment, "folder": {}, "@microsoft.graph.conflictBehavior": "replace"},
+                )
+            current = match
+        return current
+
+    def upload_to_folder(self, folder_item, local_file, remote_name=None):
+        remote_name = remote_name or Path(local_file).name
+        drive_id = folder_item["parentReference"]["driveId"]
+        folder_id = folder_item["id"]
+        encoded_name = quote(remote_name, safe="")
+        data = Path(local_file).read_bytes()
+        uploaded = self.put_bytes(
+            f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{folder_id}:/{encoded_name}:/content",
+            data,
+            "text/html; charset=utf-8" if remote_name.lower().endswith(".html") else "application/octet-stream",
+        )
+        return uploaded
 
     def drive_item_from_share_url(self, share_url):
         parsed = urlparse(share_url or "")
@@ -366,12 +418,30 @@ def main():
         "support_files": len(support_items),
         "cronograma": selected_cron.get("name"),
     }
-    (public_dir / "metadata.json").write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+    metadata_path = public_dir / "metadata.json"
+    metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    publish_site_url = os.environ.get("PUBLISH_SITE_URL", "https://brillaseo2.sharepoint.com/sites/SoportesEspejo").strip()
+    publish_folder = os.environ.get("PUBLISH_FOLDER_PATH", "Dashboard Mantenimiento").strip()
+    if publish_site_url and publish_folder and os.environ.get("PUBLISH_TO_SHAREPOINT", "1") != "0":
+        print(f"Publicando dashboard en SharePoint: {publish_site_url} / {publish_folder}")
+        folder = graph.ensure_folder(publish_site_url, publish_folder)
+        published = []
+        for file_path in [public_dir / "index.html", public_dir / "metadata.json", public_dir / "validacion_soportes_sharepoint.xlsx", public_dir / "auditoria_soportes.xlsx"]:
+            if file_path.exists():
+                uploaded = graph.upload_to_folder(folder, file_path)
+                published.append({"name": file_path.name, "webUrl": uploaded.get("webUrl", "")})
+                print(f"Publicado: {file_path.name} -> {uploaded.get('webUrl', '')}")
+        metadata["published_to_sharepoint"] = published
+        metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
+
     print(json.dumps(metadata, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":
     main()
+
+
 
 
 
