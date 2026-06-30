@@ -425,14 +425,20 @@ def main():
     publish_folder = os.environ.get("PUBLISH_FOLDER_PATH", "Dashboard Mantenimiento").strip()
     if publish_site_url and publish_folder and os.environ.get("PUBLISH_TO_SHAREPOINT", "1") != "0":
         print(f"Publicando dashboard en SharePoint: {publish_site_url} / {publish_folder}")
-        folder = graph.ensure_folder(publish_site_url, publish_folder)
         published = []
-        for file_path in [public_dir / "index.html", public_dir / "metadata.json", public_dir / "validacion_soportes_sharepoint.xlsx", public_dir / "auditoria_soportes.xlsx"]:
-            if file_path.exists():
-                uploaded = graph.upload_to_folder(folder, file_path)
-                published.append({"name": file_path.name, "webUrl": uploaded.get("webUrl", "")})
-                print(f"Publicado: {file_path.name} -> {uploaded.get('webUrl', '')}")
-        metadata["published_to_sharepoint"] = published
+        try:
+            folder = graph.ensure_folder(publish_site_url, publish_folder)
+            for file_path in [public_dir / "index.html", public_dir / "metadata.json", public_dir / "validacion_soportes_sharepoint.xlsx", public_dir / "auditoria_soportes.xlsx"]:
+                if file_path.exists():
+                    uploaded = graph.upload_to_folder(folder, file_path)
+                    published.append({"name": file_path.name, "webUrl": uploaded.get("webUrl", "")})
+                    print(f"Publicado: {file_path.name} -> {uploaded.get('webUrl', '')}")
+            metadata["published_to_sharepoint"] = published
+        except Exception as exc:
+            metadata["publish_warning"] = str(exc)
+            print("ADVERTENCIA: el dashboard se genero, pero no se pudo publicar en SharePoint.")
+            print("Para publicar, la app necesita permiso de escritura sobre el sitio/carpeta destino.")
+            print(f"Detalle publicacion: {exc}")
         metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
 
     print(json.dumps(metadata, ensure_ascii=False, indent=2))
@@ -440,6 +446,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
