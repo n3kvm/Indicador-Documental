@@ -416,6 +416,59 @@ def build_portal_html(metadata):
       statusEl.textContent = text;
       statusEl.className = "refresh-status show" + (kind ? " " + kind : "");
     }}
+    async function waitForCompletion(endpoint, button) {
+
+  const statusEndpoint = endpoint.replace(/\/$/, "");
+
+  while (true) {
+
+    await new Promise(r => setTimeout(r, 5000));
+
+    try {
+
+      const response = await fetch(statusEndpoint);
+
+      const data = await response.json();
+
+      if (!data.ok) continue;
+
+      if (data.status === "queued") {
+        showStatus("🟡 Actualización en cola en GitHub Actions...", "");
+        continue;
+      }
+
+      if (data.status === "in_progress") {
+        showStatus("🔵 Generando dashboard...", "");
+        continue;
+      }
+
+      if (data.status === "completed") {
+
+        if (data.conclusion === "success") {
+
+          showStatus("✅ Dashboard actualizado. Recargando...", "ok");
+
+          setTimeout(() => location.reload(), 2000);
+
+        } else {
+
+          showStatus("❌ La actualización terminó con error.", "error");
+
+          button.disabled = false;
+
+        }
+
+        return;
+
+      }
+
+    } catch (e) {
+      console.error(e);
+    }
+
+  }
+
+}
     async function refreshDashboard(button) {{
       const target = button.dataset.target;
       const mode = button.dataset.mode;
@@ -443,7 +496,12 @@ def build_portal_html(metadata):
           body: JSON.stringify({{ anio, mes }})
         }});
         if (!response.ok) throw new Error("HTTP " + response.status);
-        showStatus("Actualización iniciada correctamente. Espera unos minutos y recarga esta página.", "ok");
+        showStatus("Solicitud enviada. Esperando a que GitHub termine...", "");
+
+        waitForCompletion(target, button);
+
+        return;
+        
       }} catch (error) {{
         showStatus("No se pudo iniciar la actualización: " + error.message, "error");
       }} finally {{
