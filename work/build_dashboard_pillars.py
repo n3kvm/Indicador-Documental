@@ -216,7 +216,7 @@ a{{color:var(--blue);text-decoration:none}} a:hover{{text-decoration:underline}}
         <div class="sub">Seguimientos separados para soportes, horas, pilares, alertas y trazabilidad mensual.</div>
       </div>
       <div class="actions">
-      
+          <button id="refreshSharePointBtn" class="toolbar-btn">Refrescar SharePoint </button>
         <button id="csvBtn" type="button">Descargar CSV</button>
       </div>
     </div>
