@@ -396,6 +396,56 @@ function csv() {{
   const text=[headers.join(",")].concat(rows.map(r=>headers.map(h=>`"${{String(typeof r[h]==='object'?JSON.stringify(r[h]):r[h]??'').replace(/"/g,'""')}}"`).join(","))).join("\\n");
   const blob=new Blob([text],{{type:"text/csv;charset=utf-8"}}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`dashboard_${{state.tab}}_mayo_2026.csv`; a.click(); URL.revokeObjectURL(url);
 }}
+async function waitForCompletion(endpoint, status, btn) {
+
+  while (true) {
+
+    await new Promise(r => setTimeout(r, 5000));
+
+    const res = await fetch(endpoint);
+
+    const data = await res.json();
+
+    if (!data.ok) {
+      status.classList.add("bad-text");
+      status.textContent = "No fue posible consultar el estado del proceso.";
+      btn.disabled = false;
+      return;
+    }
+
+    if (data.status === "queued") {
+      status.textContent = "🟡 En cola en GitHub Actions...";
+      continue;
+    }
+
+    if (data.status === "in_progress") {
+      status.textContent = "🔵 Generando dashboard...";
+      continue;
+    }
+
+    if (data.status === "completed") {
+
+      if (data.conclusion === "success") {
+
+        status.textContent = "✅ Actualización completada. Recargando...";
+
+        setTimeout(() => {
+          location.reload();
+        },1500);
+
+      } else {
+
+        status.classList.add("bad-text");
+        status.textContent = "❌ La actualización terminó con errores.";
+
+        btn.disabled = false;
+
+      }
+
+      return;
+    }
+  }
+}
 async function refreshSharePoint() {{
   const btn=$("refreshBtn");
   const status=$("refreshStatus");
@@ -422,9 +472,15 @@ async function refreshSharePoint() {{
     }});
     const data = await res.json().catch(()=>({{ok:false,message:"Respuesta no valida del servidor local."}}));
     if (!res.ok || !data.ok) throw new Error(data.message || data.error || `HTTP ${{res.status}}`);
-    status.textContent = "Dashboard actualizado. Recargando...";
-    const target = data.dashboardUrl || (location.protocol === "file:" ? "http://127.0.0.1:8787/" : location.pathname);
-    location.href = target + (target.includes("?") ? "&" : "?") + "t=" + Date.now();
+    status.textContent = "Solicitud enviada. Esperando a que GitHub termine...";
+
+waitForCompletion(
+  endpoint.replace(/\/$/, "") + "/status",
+  status,
+  btn
+);
+
+return;
   }} catch (err) {{
     status.classList.add("bad-text");
     status.textContent = "No se pudo refrescar desde esta pagina. Abre 08_DASHBOARD_INTERACTIVO_CON_BOTON.cmd y vuelve a intentar. Detalle: " + err.message;
