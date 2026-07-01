@@ -36,6 +36,9 @@ Crea estos secretos:
 | `CLIENT_SECRET` | Secreto del App Registration |
 | `SUPPORTS_FOLDER_URL` | URL de la carpeta de soportes en el espejo Brillaseo |
 | `CRONOGRAMA_URL` | URL del cronograma o carpeta del cronograma en el espejo Brillaseo |
+| `ZOHO_REFRESH_TOKEN` | Refresh token OAuth de Zoho Creator |
+| `ZOHO_CLIENT_ID` | Client ID OAuth de Zoho |
+| `ZOHO_CLIENT_SECRET` | Client secret OAuth de Zoho |
 
 Opcionalmente crea esta variable:
 
@@ -44,6 +47,18 @@ Opcionalmente crea esta variable:
 | Variable | Uso |
 | --- | --- |
 | `DASHBOARD_ROUTE_NAME` | Sufijo visual del dashboard, ejemplo `JUNIO` o `CONTINGENCIA` |
+| `ZOHO_CREATOR_BASE_URL` | Base API de Zoho. Por defecto `https://www.zohoapis.com` |
+| `ZOHO_ACCOUNTS_URL` | URL de cuentas Zoho. Por defecto `https://accounts.zoho.com` |
+| `ZOHO_ACCOUNT_OWNER` | Account owner name de la app Zoho Creator |
+| `ZOHO_APP_LINK_NAME` | Link name de la aplicacion Zoho Creator |
+| `ZOHO_REPORT_LINK_NAME` | Link name del reporte de autogestiones |
+| `ZOHO_FIELD_AUTOGESTION` | Link name del campo No. autogestion. Por defecto `Autogestion` |
+| `ZOHO_FIELD_SEDE` | Link name del campo sede. Por defecto `Sede` |
+| `ZOHO_FIELD_UES` | Link name del campo UES. Por defecto `UES` |
+| `ZOHO_FIELD_FECHA_REALIZACION` | Link name del campo fecha de realizacion. Por defecto `Fecha_Realizacion` |
+| `ZOHO_FIELD_FECHA_REGISTRO` | Link name del campo fecha de registro. Por defecto `Added_Time` |
+
+Si Zoho no esta configurado, el dashboard se genera igual, pero la vista `Falta subir aplicativo` queda sin datos del aplicativo.
 
 ## Ejecutar manualmente
 
@@ -80,26 +95,9 @@ El artifact incluye:
 - `validacion_soportes_sharepoint.xlsx`
 - `auditoria_soportes.xlsx`
 
-## Refrescar desde el HTML
+## Refrescar el dashboard
 
-El dashboard generado incluye el boton `Refrescar SharePoint`.
-
-Cuando el HTML se genera desde GitHub Actions, ese boton puede disparar nuevamente el workflow en GitHub. Por seguridad, el token de GitHub no queda guardado dentro del HTML: la persona debe pegarlo cuando el navegador lo solicite.
-
-El token recomendado es un Fine-grained personal access token limitado a este repositorio con:
-
-- `Actions`: `Read and write`
-- `Contents`: `Read-only`
-
-Uso:
-
-1. Abrir `index.html`
-2. Clic en `Refrescar SharePoint`
-3. Pegar el token de GitHub cuando lo pida
-4. Esperar a que abra GitHub Actions
-5. Descargar el artifact `dashboard-mantenimiento` cuando termine
-
-Importante: este boton solo dispara GitHub Actions. Para que el workflow lea SharePoint, Microsoft 365 debe permitir la App Registration o el metodo de autenticacion configurado.
+La actualizacion se hace desde GitHub Actions o desde el Worker configurado para disparar el workflow. El HTML publicado no guarda tokens ni secretos.
 
 ## Publicar como GitHub Pages
 
