@@ -216,7 +216,6 @@ a{{color:var(--blue);text-decoration:none}} a:hover{{text-decoration:underline}}
         <div class="sub">Seguimientos separados para soportes, horas, pilares, alertas y trazabilidad mensual.</div>
       </div>
       <div class="actions">
-          <button id="refreshSharePointBtn" class="toolbar-btn">Refrescar SharePoint </button>
         <button id="csvBtn" type="button">Descargar CSV</button>
       </div>
     </div>
@@ -598,8 +597,9 @@ async function waitForCompletion(endpoint, status, btn) {{
 }}
 
 async function refreshSharePoint() {{
-  const btn=$("refreshBtn");
+  const btn=$("refreshBtn") || $("refreshSharePointBtn");
   const status=$("refreshStatus");
+  if (!btn || !status) return;
   const localHttp = location.protocol === "http:" && !GITHUB_REFRESH.repository;
   const endpoint = REFRESH_ENDPOINT || (location.protocol === "file:" ? "http://127.0.0.1:8787/refresh" : (localHttp ? "/refresh" : ""));
   btn.disabled = true;
@@ -674,8 +674,9 @@ $("search").addEventListener("input",e=>{{state.search=e.target.value;render();}
 $("status").addEventListener("change",e=>{{state.status=e.target.value;render();}});
 $("ues").addEventListener("change",e=>{{state.ues=e.target.value;render();}});
 $("onlyAlerts").addEventListener("change",e=>{{state.onlyAlerts=e.target.value;render();}});
-$("csvBtn").addEventListener("click",csv);
-$("refreshBtn").addEventListener("click",refreshSharePoint);
+$("csvBtn")?.addEventListener("click",csv);
+$("refreshBtn")?.addEventListener("click",refreshSharePoint);
+$("refreshSharePointBtn")?.addEventListener("click",refreshSharePoint);
 $("allDaysBtn").addEventListener("click",()=>{{state.selectedDays.clear();render();}});
 $("clearDaysBtn").addEventListener("click",()=>{{state.selectedDays.clear();render();}});
 document.querySelectorAll(".audit-status").forEach(b=>b.addEventListener("click",()=>{{state.appFilter=b.dataset.appFilter;document.querySelectorAll(".audit-status").forEach(x=>x.classList.toggle("active",x.dataset.appFilter===state.appFilter));render();}}));

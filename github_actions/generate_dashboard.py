@@ -416,54 +416,6 @@ def build_portal_html(metadata):
       statusEl.textContent = text;
       statusEl.className = "refresh-status show" + (kind ? " " + kind : "");
     }}
-
-    async function waitForCompletion(endpoint, button) {{
-      const statusEndpoint = endpoint.replace(/\/$/, "");
-
-      for (let attempt = 1; attempt <= 90; attempt++) {{
-        await new Promise(r => setTimeout(r, 5000));
-
-        try {{
-          const response = await fetch(statusEndpoint, {{
-            method: "GET",
-            cache: "no-store"
-          }});
-
-          const data = await response.json().catch(() => ({{ ok: false }}));
-
-          if (!response.ok || !data.ok) {{
-            showStatus("Actualización iniciada. Consultando estado de GitHub Actions...", "");
-            continue;
-          }}
-
-          if (data.status === "queued") {{
-            showStatus("🟡 Actualización en cola en GitHub Actions...", "");
-            continue;
-          }}
-
-          if (data.status === "in_progress") {{
-            showStatus("🔵 Generando dashboard. Leyendo SharePoint y publicando resultados...", "");
-            continue;
-          }}
-
-          if (data.status === "completed") {{
-            if (data.conclusion === "success") {{
-              showStatus("✅ Dashboard actualizado. Recargando página...", "ok");
-              setTimeout(() => location.reload(), 2000);
-            }} else {{
-              showStatus("❌ La actualización terminó con estado: " + (data.conclusion || "sin conclusión") + ". Revisa GitHub Actions.", "error");
-              button.disabled = false;
-            }}
-            return;
-          }}
-        }} catch (error) {{
-          showStatus("Actualización iniciada. No se pudo consultar el estado todavía...", "");
-        }}
-      }}
-
-      showStatus("La actualización sigue tardando. Revisa GitHub Actions o recarga en unos minutos.", "error");
-      button.disabled = false;
-    }}
     async function refreshDashboard(button) {{
       const target = button.dataset.target;
       const mode = button.dataset.mode;
@@ -490,14 +442,11 @@ def build_portal_html(metadata):
           headers: {{ "Content-Type": "application/json" }},
           body: JSON.stringify({{ anio, mes }})
         }});
-        const data = await response.json().catch(() => ({{ ok: false, error: "Respuesta no válida del endpoint." }}));
-        if (!response.ok || !data.ok) throw new Error(data.error || data.message || data.detail || "HTTP " + response.status);
-
-        showStatus("Solicitud enviada. Esperando a que GitHub termine...", "");
-        waitForCompletion(target, button);
-        return;
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        showStatus("Actualización iniciada correctamente. Espera unos minutos y recarga esta página.", "ok");
       }} catch (error) {{
         showStatus("No se pudo iniciar la actualización: " + error.message, "error");
+      }} finally {{
         button.disabled = false;
       }}
     }}
@@ -576,6 +525,7 @@ def main():
     compare_output = run_outputs / "validacion_soportes_sharepoint.xlsx"
     audit_output = run_outputs / "auditoria_soportes.xlsx"
     pillars_output = run_work / "pillars_hours_validation.json"
+    app_upload_output = run_work / "app_upload_validation.json"
     dashboard_output = run_outputs / "index.html"
 
     env = os.environ.copy()
@@ -594,6 +544,9 @@ def main():
             "PDF_TEXT_SUMMARY_PATH": str(run_work / "pdf_text_summary.json"),
             "COMPARE_OUTPUT_PATH": str(compare_output),
             "PILLARS_VALIDATION_PATH": str(pillars_output),
+            "APP_UPLOAD_VALIDATION_PATH": str(app_upload_output),
+            "APP_AUTOGESTIONES_CSV_PATH": os.environ.get("APP_AUTOGESTIONES_CSV_PATH", ""),
+            "DASHBOARD_INCLUDE_APP_VIEW": "0",
             "DASHBOARD_OUTPUT_PATH": str(dashboard_output),
             "DASHBOARD_REFRESH_ENDPOINT": "",
         }
