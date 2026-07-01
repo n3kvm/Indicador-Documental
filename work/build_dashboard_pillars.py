@@ -159,7 +159,7 @@ a{{color:var(--blue);text-decoration:none}} a:hover{{text-decoration:underline}}
         <div class="sub">Cruce de SharePoint, Cronog Mayo 2026 y lectura de actividades en PDFs.</div>
       </div>
       <div class="actions">
-        <button id="refreshBtn" type="button">Refrescar SharePoint</button>
+        <!--<button id="refreshBtn" type="button">Refrescar SharePoint</button>-->
         <button id="csvBtn" type="button">Descargar CSV</button>
       </div>
     </div>
@@ -474,7 +474,7 @@ $("status").addEventListener("change",e=>{{state.status=e.target.value;render();
 $("ues").addEventListener("change",e=>{{state.ues=e.target.value;render();}});
 $("onlyAlerts").addEventListener("change",e=>{{state.onlyAlerts=e.target.value;render();}});
 $("csvBtn").addEventListener("click",csv);
-$("refreshBtn").addEventListener("click",refreshSharePoint);
+//$("refreshBtn").addEventListener("click",refreshSharePoint);
 $("allDaysBtn").addEventListener("click",()=>{{state.selectedDays.clear();render();}});
 $("clearDaysBtn").addEventListener("click",()=>{{state.selectedDays.clear();render();}});
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>setTab(b.dataset.tab)));
