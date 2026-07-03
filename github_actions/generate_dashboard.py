@@ -273,6 +273,56 @@ def normalize_folder_name(value):
     text = text.upper()
     text = re.sub(r"[^A-Z0-9]+", "", text)
     return text
+def normalize_document_text(value):
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.lower()
+    text = re.sub(r"[\u2013\u2014]", "-", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def support_document_key(item):
+    name = item.get("name", "")
+    stem = Path(name).stem
+    ext = Path(name).suffix.lower()
+    stem = normalize_document_text(stem)
+    stem = re.sub(r"\s*\((?:copia|copy|\d+)\)\s*$", "", stem)
+    stem = re.sub(r"\s+por\s+.*$", "", stem)
+    stem = re.sub(r"\s+pendiente\s+.*$", "", stem)
+    stem = re.sub(r"\s+falta\s+.*$", "", stem)
+    stem = re.sub(r"\s+sin\s+firma\s+.*$", "", stem)
+    stem = re.sub(r"\b(\d{1,2})\s*(?:a|al|-|_)\s*(\d{1,2})\b", r"\1-\2", stem)
+    stem = re.sub(r"[^a-z0-9]+", " ", stem)
+    stem = re.sub(r"\s+", " ", stem).strip()
+
+    parent = posixpath.dirname(server_relative_from_web_url(item.get("webUrl", "")))
+    parent = normalize_document_text(parent)
+    return f"{parent}|{ext}|{stem}"
+
+
+def dedupe_support_items(items):
+    selected = {}
+    duplicates = []
+    for item in items:
+        key = support_document_key(item)
+        current = selected.get(key)
+        if not current:
+            selected[key] = item
+            continue
+        current_modified = current.get("lastModifiedDateTime", "")
+        item_modified = item.get("lastModifiedDateTime", "")
+        if item_modified >= current_modified:
+            duplicates.append(current)
+            selected[key] = item
+        else:
+            duplicates.append(item)
+    if duplicates:
+        print(f"Duplicados equivalentes omitidos en dashboard: {len(duplicates)}")
+        for item in sorted(duplicates, key=lambda x: x.get("name", ""))[:40]:
+            print(f"  - omitido: {item.get('name', '')}")
+    return list(selected.values())
+
 
 
 def find_child_folder(graph, parent, expected_names, label):
@@ -536,8 +586,11 @@ def main():
     supports_root_item = graph.drive_item_from_share_url(supports_url)
     supports_item = resolve_support_period_folder(graph, supports_root_item, year, month, month_name)
     print(f"Carpeta de soportes seleccionada: {supports_item.get('name')}")
-    support_items = [item for item in graph.list_recursive(supports_item) if item.get("name", "").lower().endswith(".pdf")]
-    print(f"PDFs encontrados en {year}/{folder_month}: {len(support_items)}")
+    support_items_raw = [item for item in graph.list_recursive(supports_item) if item.get("name", "").lower().endswith(".pdf")]
+    print(f"PDFs encontrados en {year}/{folder_month}: {len(support_items_raw)}")
+    support_items = dedupe_support_items(support_items_raw)
+    if len(support_items) != len(support_items_raw):
+        print(f"PDFs usados despues de depurar duplicados: {len(support_items)}")
 
     print("Buscando cronograma...")
     cronograma_item = graph.drive_item_from_share_url(cronograma_url)
@@ -661,6 +714,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
