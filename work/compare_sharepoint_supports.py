@@ -1,4 +1,4 @@
-﻿import json
+import json
 import os
 import re
 import unicodedata
@@ -132,6 +132,13 @@ def pdf_days_index():
     return out
 
 
+def strip_trailing_day_number(text):
+    m = re.search(r"\b(\d{1,2})\s*$", text or "")
+    if m and 1 <= int(m.group(1)) <= 31:
+        return text[:m.start()].rstrip()
+    return text
+
+
 def site_from_filename(name):
     stem = re.sub(r"\.[^.]+$", "", name)
     stem = re.sub(r"^\s*\d+\s*[-.]?\s*", "", stem)
@@ -153,7 +160,7 @@ def site_from_filename(name):
     stem = re.sub(r"\(\s*\d{1,2}\s*\)", "", stem)
     stem = re.sub(r"\(([^)]*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ][^)]*)\)", r" \1 ", stem)
     stem = re.sub(r"\b\d{1,2}\s*(?:a|-)\s*\d{1,2}\s*$", "", stem, flags=re.I)
-    stem = re.sub(r"\b\d{1,2}\s*$", "", stem)
+    stem = strip_trailing_day_number(stem)
     stem = re.sub(r"\s+", " ", stem)
     stem = stem.strip(" -_.")
     return stem.strip()
@@ -167,6 +174,10 @@ def score_name(a, b):
         return 1
     seq = SequenceMatcher(None, na, nb).ratio()
     ta, tb = set(na.split()), set(nb.split())
+    nums_a = {token for token in ta if token.isdigit()}
+    nums_b = {token for token in tb if token.isdigit()}
+    if (nums_a or nums_b) and nums_a != nums_b:
+        return 0
     token = len(ta & tb) / max(len(ta | tb), 1)
     containment = len(ta & tb) / max(min(len(ta), len(tb)), 1)
     return max(seq, token, containment * 0.92)
@@ -555,4 +566,7 @@ print(json.dumps({
     "checklists_digitados_falta_cargar": sum(row["cantidad_digitada_falta_cargar"] for row in calendar_rows),
     "output": str(OUT),
 }, ensure_ascii=False, indent=2))
+
+
+
 
