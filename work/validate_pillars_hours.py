@@ -382,7 +382,7 @@ for item in summary:
         file_site = file_match.get("sede", "") if isinstance(file_match, dict) else str(file_match or "")
         file_confidence = file_match.get("confianza", 0) if isinstance(file_match, dict) else 0
         file_site_clean = file_match.get("sede_archivo_limpia", "") if isinstance(file_match, dict) else ""
-        sede_final = file_site or sede
+        sede_final = sede or file_site
         sede_key = canonical_key(sede_final)
         pdf_key = canonical_key(sede)
         file_key = canonical_key(file_site)
