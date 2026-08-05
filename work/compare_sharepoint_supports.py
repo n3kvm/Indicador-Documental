@@ -101,35 +101,93 @@ def date_from_checklist_text(text):
         return None
 
 
-def pdf_days_index():
+def sede_from_checklist_block(block):
+    """Lee el campo 'Sede (Comfandi)' que trae cada checklist DENTRO del PDF.
+    Esta es la fuente de verdad real: el nombre del archivo es solo una
+    etiqueta puesta a mano y puede tener errores de tipeo, formatos de rango
+    inconsistentes, o quedar mal copiado; el contenido del PDF no."""
+    m = re.search(
+        r"Sede \(Comfandi\)\s*(.*?)(?:Centro de costo|Fecha de realizaci[oó]n)",
+        fix_text(block), re.S | re.I,
+    )
+    if not m:
+        return ""
+    return " ".join(x.strip() for x in fix_text(m.group(1)).splitlines() if x.strip())
+
+
+def pdf_checklist_index():
+    """Recorre cada PDF, separa sus checklists individuales y, para cada uno,
+    lee del CONTENIDO (no del nombre del archivo) la sede y la fecha.
+
+    Devuelve:
+      - entries: lista plana de {archivo, sede_pdf, dia, fecha_iso} — una fila
+        por checklist encontrado dentro de cualquier PDF. Esta es la base para
+        calcular qué días quedaron cubiertos por sede, sin depender de si el
+        nombre del archivo se pudo "limpiar" bien o no.
+      - by_file: resumen por archivo (días, fechas, sedes vistas dentro del
+        PDF, y el motivo si no se pudo leer nada) — se usa solo para mostrar
+        evidencia/observaciones en el reporte, no para decidir cobertura.
+    """
+    entries = []
+    by_file = {}
     if not PDF_TEXT_SUMMARY.exists():
-        return {}
-    out = {}
+        return entries, by_file
     for item in json.loads(PDF_TEXT_SUMMARY.read_text(encoding="utf-8")):
         name = item.get("Name", "")
         days = set()
         dates = []
+        sedes_en_pdf = set()
         text_path = item.get("text_path") or ""
         source = "Sin fecha leída en PDF"
         if text_path and Path(text_path).exists():
             text = Path(text_path).read_text(encoding="utf-8", errors="ignore")
             for block in split_checklists(text):
                 parsed = date_from_checklist_text(block)
+                sede_pdf = sede_from_checklist_block(block)
+                if sede_pdf:
+                    sedes_en_pdf.add(sede_pdf)
                 if parsed and parsed.year == YEAR and parsed.month == MONTH:
                     days.add(parsed.day)
                     dates.append(parsed.isoformat())
+                    entries.append({
+                        "archivo": name,
+                        "sede_pdf": sede_pdf,
+                        "dia": parsed.day,
+                        "fecha_iso": parsed.isoformat(),
+                    })
         if item.get("downloadedBytes") == 0 or int(item.get("Length") or 0) == 0:
             source = "PDF vacío / 0 bytes"
         elif item.get("text_error"):
             source = f"Error lectura PDF: {item.get('text_error')}"
         elif days:
             source = "Contenido PDF"
-        out[name] = {
+        by_file[name] = {
             "days": days,
             "dates": sorted(set(dates)),
+            "sedes_en_pdf": sorted(sedes_en_pdf),
             "source": source,
         }
-    return out
+    return entries, by_file
+
+
+def strip_day_list_parens(stem):
+    """Elimina cualquier grupo entre paréntesis que sea una lista/rango de días,
+    sin importar el separador: "(01A 11-14)", "(1-2-8-9-16-17-23-24-29-30)",
+    "(27-28-29)", "(6-7-8)", "(11 )", etc. Antes solo se reconocía el patrón
+    simple "num a num", por lo que estas variantes dejaban dígitos pegados al
+    nombre de la sede y el archivo terminaba sin emparejar (score 0)."""
+
+    def repl(match):
+        content = match.group(1)
+        cleaned = re.sub(r"(?i)\b(a|al|y)\b", " ", content)
+        cleaned = re.sub(r"(?i)(\d)[a-z]+", r"\1", cleaned)
+        cleaned = re.sub(r"[^\d]+", " ", cleaned).strip()
+        tokens = cleaned.split()
+        if tokens and all(t.isdigit() and 1 <= int(t) <= 31 for t in tokens):
+            return " "
+        return match.group(0)
+
+    return re.sub(r"\(([^)]*)\)", repl, stem)
 
 
 def strip_trailing_day_number(text):
@@ -156,6 +214,7 @@ def site_from_filename(name):
     stem = re.sub(r"(?i)\bsoporte\b.*$", "", stem)
     stem = re.sub(r"(?i)\bcheck\s*list\b.*$", "", stem)
     stem = re.sub(r"(?i)\bchecklist\b.*$", "", stem)
+    stem = strip_day_list_parens(stem)
     stem = re.sub(r"\(\s*\d{1,2}\s*(?:a|-)\s*\d{1,2}\s*\)", "", stem, flags=re.I)
     stem = re.sub(r"\(\s*\d{1,2}\s*\)", "", stem)
     stem = re.sub(r"\(([^)]*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ][^)]*)\)", r" \1 ", stem)
@@ -281,7 +340,7 @@ def saturdays_not_programmed(start_value, end_value, expected_days):
 
 expected = json.loads(EXPECTED.read_text(encoding="utf-8"))
 sp = json.loads(SP_FILES.read_text(encoding="utf-8"))
-pdf_days_by_name = pdf_days_index()
+checklist_entries, pdf_days_by_name = pdf_checklist_index()
 sites = expected["site_summary"]
 site_lookup = {row["sede"]: row for row in sites}
 site_lookup_normalized = {normalize(row["sede"]): row["sede"] for row in sites}
@@ -293,23 +352,64 @@ for row in sites:
     if days:
         actual_by_site[row["sede"]] = days
 
+
+def match_site(name_guess):
+    """Empareja un nombre de sede (venga del archivo o del contenido del PDF)
+    contra el listado real de sedes del cronograma."""
+    if not name_guess:
+        return None, 0
+    exact = site_lookup_normalized.get(normalize(name_guess))
+    if exact:
+        return exact, 1
+    best_site, best_score = None, 0
+    for site in site_lookup:
+        s = score_name(name_guess, site)
+        if s > best_score or (abs(s - best_score) < 0.0001 and more_specific_site(site, best_site)):
+            best_site, best_score = site, s
+    return best_site, best_score
+
+
+# --- Cobertura basada en el CONTENIDO del PDF (fuente de verdad) ---
+# Cada checklist dentro de un PDF trae su propio campo "Sede (Comfandi)" y su
+# propia "Fecha de realización". Un día queda cubierto para una sede si existe
+# al menos un checklist, en cualquier PDF, cuya sede leída coincida con esa
+# sede y cuya fecha caiga en ese día. Esto ya no depende de si el nombre del
+# archivo se pudo interpretar bien (rangos "01 A 11", listas "27-28-29",
+# "01A 11-14", errores de tipeo, etc.) — el nombre del archivo puede fallar y
+# ya no afecta si el día queda marcado como cubierto.
+covered_by_site = defaultdict(lambda: defaultdict(set))  # sede -> dia -> {archivos}
+unmatched_checklists = []
+for entry in checklist_entries:
+    best_site, best_score = match_site(entry["sede_pdf"])
+    if best_site and best_score >= 0.62:
+        covered_by_site[best_site][entry["dia"]].add(entry["archivo"])
+    else:
+        unmatched_checklists.append({
+            "archivo": entry["archivo"],
+            "sede_leida_en_pdf": entry["sede_pdf"],
+            "fecha": entry["fecha_iso"],
+            "mejor_sede_candidata": best_site or "",
+            "confianza": round(best_score, 3),
+        })
+
+# --- Info por archivo: solo para evidencia / control de calidad ---
+# El nombre del archivo YA NO decide si un día cuenta como cubierto; solo se
+# usa aquí para poder avisar si el nombre del archivo dice una sede distinta
+# a la que realmente aparece adentro del PDF (posible archivo mal renombrado
+# o subido en la carpeta equivocada).
 file_rows = []
-files_by_site = defaultdict(list)
 unmatched_files = []
 for f in sp.get("files", []):
     name = f["Name"]
     file_site = site_from_filename(name)
-    pdf_days = pdf_days_by_name.get(name, {"days": set(), "dates": [], "source": "PDF no leído"})
-    days = set(pdf_days["days"])
-    exact_site = site_lookup_normalized.get(normalize(file_site))
-    if exact_site:
-        best_site, best_score = exact_site, 1
-    else:
-        best_site, best_score = None, 0
-        for site in site_lookup:
-            s = score_name(file_site, site)
-            if s > best_score or (abs(s - best_score) < 0.0001 and more_specific_site(site, best_site)):
-                best_site, best_score = site, s
+    pdf_info = pdf_days_by_name.get(name, {"days": set(), "dates": [], "sedes_en_pdf": [], "source": "PDF no leído"})
+    days = set(pdf_info["days"])
+    best_site, best_score = match_site(file_site)
+    sedes_en_pdf = pdf_info.get("sedes_en_pdf", [])
+    sedes_en_pdf_matched = sorted({s for s, sc in (match_site(s) for s in sedes_en_pdf) if s and sc >= 0.62})
+    nombre_vs_contenido_diferente = bool(
+        best_site and sedes_en_pdf_matched and best_site not in sedes_en_pdf_matched
+    )
     folder = f.get("ParentFolder", "").split("/")[-1]
     file_row = {
         "archivo": name,
@@ -317,59 +417,40 @@ for f in sp.get("files", []):
         "sede_archivo": file_site,
         "sede_match": best_site or "",
         "confianza_match": round(best_score, 3),
+        "sede_leida_en_pdf": " | ".join(sedes_en_pdf),
+        "nombre_vs_contenido_diferente": "Sí" if nombre_vs_contenido_diferente else "",
         "dias_archivo": ",".join(map(str, sorted(days))),
-        "fechas_pdf": ",".join(pdf_days.get("dates", [])),
-        "fuente_dias": pdf_days.get("source", "PDF no leído"),
+        "fechas_pdf": ",".join(pdf_info.get("dates", [])),
+        "fuente_dias": pdf_info.get("source", "PDF no leído"),
         "creado_sharepoint": f.get("TimeCreated", ""),
         "modificado_sharepoint": f.get("TimeLastModified", ""),
         "tamano_bytes": int(f.get("Length") or 0),
         "url": sharepoint_file_view_url(f),
     }
     file_rows.append(file_row)
-    if best_site and best_score >= 0.62 and days:
-        files_by_site[best_site].append({**file_row, "days": days})
-    else:
+    if not (best_site and best_score >= 0.62 and days):
         unmatched_files.append(file_row)
 
 detail_rows = []
 summary_rows = []
 for site in sorted(actual_by_site):
     days = actual_by_site.get(site, set())
-    matched_files = files_by_site.get(site, [])
-    covered_days = set()
-    evidence = defaultdict(list)
-    for file in matched_files:
-        for day in days:
-            if day in file["days"]:
-                covered_days.add(day)
-                evidence[day].append(file["archivo"])
-    file_days = set().union(*(f["days"] for f in matched_files)) if matched_files else set()
+    covered_map = covered_by_site.get(site, {})
+    covered_days = {d for d in days if d in covered_map}
     exact_missing = sorted(days - covered_days)
-    extra_file_days = sorted(file_days - days) if matched_files else []
-    complete_by_quantity_with_date_observation = bool(exact_missing and matched_files and len(file_days) >= len(days))
+    extra_file_days = sorted(set(covered_map.keys()) - days)
     if not exact_missing:
         site_status = "Completo"
         summary_missing = []
-        summary_covered_days = covered_days
         observation = ""
-    elif complete_by_quantity_with_date_observation:
-        site_status = "Completo con observación"
-        summary_missing = []
-        summary_covered_days = file_days
-        observation = (
-            "La cantidad de soportes coincide, pero las fechas leídas en PDF no coinciden "
-            f"con las fechas digitadas. Digitado: {','.join(map(str, sorted(days)))}. "
-            f"PDF: {','.join(map(str, sorted(file_days)))}."
-        )
     else:
         site_status = "Incompleto"
         summary_missing = exact_missing
-        summary_covered_days = covered_days
         observation = ""
-    matched_file_names = " | ".join(sorted({f["archivo"] for f in matched_files}))
+    matched_file_names = " | ".join(sorted({a for files in covered_map.values() for a in files}))
     for day in sorted(days):
-        files = evidence.get(day, [])
-        detail_status = "Cargado" if files else ("Fecha diferente" if complete_by_quantity_with_date_observation else "Falta soporte")
+        files = sorted(covered_map.get(day, set()))
+        detail_status = "Cargado" if files else "Falta soporte"
         detail_rows.append({
             "sede": site,
             "ues": site_lookup[site].get("ues", ""),
@@ -377,7 +458,7 @@ for site in sorted(actual_by_site):
             "fecha": f"{YEAR}-{MONTH:02d}-{day:02d}",
             "dia": day,
             "estado": detail_status,
-            "archivo_soporte": " | ".join(files) if files else (matched_file_names if complete_by_quantity_with_date_observation else ""),
+            "archivo_soporte": " | ".join(files),
         })
     summary_rows.append({
         "sede": site,
@@ -385,12 +466,12 @@ for site in sorted(actual_by_site):
         "ubicacion": site_lookup[site].get("ubicacion", ""),
         "dias_digitados": ",".join(map(str, sorted(days))),
         "cantidad_digitada": len(days),
-        "dias_cubiertos_sharepoint": ",".join(map(str, sorted(summary_covered_days))),
-        "cantidad_cubierta": min(len(summary_covered_days), len(days)),
+        "dias_cubiertos_sharepoint": ",".join(map(str, sorted(covered_days))),
+        "cantidad_cubierta": len(covered_days),
         "dias_faltantes": ",".join(map(str, summary_missing)),
         "cantidad_faltante": len(summary_missing),
         "dias_en_archivo_no_digitados": ",".join(map(str, extra_file_days)),
-        "archivos_match": len(matched_files),
+        "archivos_match": len({a for files in covered_map.values() for a in files}),
         "estado": site_status,
         "observacion": observation,
     })
@@ -413,8 +494,7 @@ for site in sorted(site_lookup):
         source_expected = f"{source_range} - rango inicio/fin"
     saturday_not_programmed = saturdays_not_programmed(start_value, end_value, expected_days)
     digitized_days = actual_by_site.get(site, set())
-    matched_files = files_by_site.get(site, [])
-    sharepoint_days = set().union(*(f["days"] for f in matched_files)) if matched_files else set()
+    sharepoint_days = set(covered_by_site.get(site, {}).keys())
     missing_digitized = sorted(expected_days - digitized_days)
     digitized_without_support = sorted(digitized_days - sharepoint_days)
     expected_without_support = sorted(expected_days - sharepoint_days)
@@ -511,10 +591,11 @@ overview = [
     {"concepto": "Días/checklists digitados", "resultado": total_digitados},
     {"concepto": "Días/checklists cubiertos por archivos cargados", "resultado": total_cubiertos},
     {"concepto": "Días/checklists faltantes", "resultado": total_faltantes},
-    {"concepto": "Sedes completas", "resultado": sum(1 for r in summary_rows if r["estado"] in {"Completo", "Completo con observación"})},
-    {"concepto": "Sedes incompletas", "resultado": sum(1 for r in summary_rows if r["estado"] not in {"Completo", "Completo con observación"})},
-    {"concepto": "Archivos sin match confiable", "resultado": len(unmatched_files)},
-    {"concepto": "Nota", "resultado": "La sede se asocia por nombre de archivo y similitud; los días cargados se toman desde la Fecha de realización leída dentro de cada PDF."},
+    {"concepto": "Sedes completas", "resultado": sum(1 for r in summary_rows if r["estado"] == "Completo")},
+    {"concepto": "Sedes incompletas", "resultado": sum(1 for r in summary_rows if r["estado"] != "Completo")},
+    {"concepto": "Archivos sin match confiable por nombre (solo referencia)", "resultado": len(unmatched_files)},
+    {"concepto": "Checklists con sede no reconocida dentro del PDF", "resultado": len(unmatched_checklists)},
+    {"concepto": "Nota", "resultado": "La cobertura se calcula leyendo 'Sede (Comfandi)' y 'Fecha de realización' DENTRO de cada checklist del PDF. El nombre del archivo ya no decide si un día está cubierto; solo se usa para detectar archivos mal renombrados (ver hoja 'Nombre vs contenido')."},
 ]
 write_rows(ws, ["concepto", "resultado"], overview)
 
@@ -529,10 +610,13 @@ ws = wb.create_sheet("Detalle por fecha")
 write_rows(ws, ["sede", "ues", "ubicacion", "fecha", "dia", "estado", "archivo_soporte"], detail_rows)
 
 ws = wb.create_sheet("Archivos SharePoint")
-write_rows(ws, ["archivo", "carpeta", "sede_archivo", "sede_match", "confianza_match", "dias_archivo", "fechas_pdf", "fuente_dias", "creado_sharepoint", "modificado_sharepoint", "tamano_bytes", "url"], file_rows)
+write_rows(ws, ["archivo", "carpeta", "sede_archivo", "sede_match", "confianza_match", "sede_leida_en_pdf", "nombre_vs_contenido_diferente", "dias_archivo", "fechas_pdf", "fuente_dias", "creado_sharepoint", "modificado_sharepoint", "tamano_bytes", "url"], file_rows)
 
 ws = wb.create_sheet("Archivos sin match")
-write_rows(ws, ["archivo", "carpeta", "sede_archivo", "sede_match", "confianza_match", "dias_archivo", "fechas_pdf", "fuente_dias", "creado_sharepoint", "modificado_sharepoint", "tamano_bytes", "url"], unmatched_files)
+write_rows(ws, ["archivo", "carpeta", "sede_archivo", "sede_match", "confianza_match", "sede_leida_en_pdf", "nombre_vs_contenido_diferente", "dias_archivo", "fechas_pdf", "fuente_dias", "creado_sharepoint", "modificado_sharepoint", "tamano_bytes", "url"], unmatched_files)
+
+ws = wb.create_sheet("Checklists sin sede reconocida")
+write_rows(ws, ["archivo", "sede_leida_en_pdf", "fecha", "mejor_sede_candidata", "confianza"], unmatched_checklists)
 
 ws = wb.create_sheet("Validación calendario")
 write_rows(ws, [
@@ -557,16 +641,13 @@ print(json.dumps({
     "dias_digitados": total_digitados,
     "dias_cubiertos": total_cubiertos,
     "dias_faltantes": total_faltantes,
-    "sedes_completas": sum(1 for r in summary_rows if r["estado"] in {"Completo", "Completo con observación"}),
-    "sedes_incompletas": sum(1 for r in summary_rows if r["estado"] not in {"Completo", "Completo con observación"}),
+    "sedes_completas": sum(1 for r in summary_rows if r["estado"] == "Completo"),
+    "sedes_incompletas": sum(1 for r in summary_rows if r["estado"] != "Completo"),
     "archivos_sin_match": len(unmatched_files),
+    "checklists_sede_no_reconocida": len(unmatched_checklists),
     "sedes_alerta_calendario": sum(1 for row in calendar_rows if row["estado"] == "Incompleto"),
     "checklists_esperados_calendario": sum(row["cantidad_esperada"] for row in calendar_rows),
     "checklists_falta_diligenciar": sum(row["cantidad_falta_diligenciar"] for row in calendar_rows),
     "checklists_digitados_falta_cargar": sum(row["cantidad_digitada_falta_cargar"] for row in calendar_rows),
     "output": str(OUT),
 }, ensure_ascii=False, indent=2))
-
-
-
-
